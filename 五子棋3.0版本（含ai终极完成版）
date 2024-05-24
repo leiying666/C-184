@@ -1,0 +1,1540 @@
+#define _CRT_SECURE_NO_WARNINGS 1
+#ifdef UNICODE
+#undef UNICODE
+#endif
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<easyx.h>
+#include<Windows.h>
+#include<graphics.h>
+#include<mmsystem.h>
+#define MAXMUSIC 10
+#define SCORE 100
+#pragma comment(lib,"winmm.lib")
+enum Menuop
+{
+	Author,
+	Start,
+	Qmusic,
+	Smusic,
+	Stop,
+	Home
+};
+enum Menuop menuState = Home;
+enum Button
+{
+	init,
+	rh,
+	pvp,
+	pve,
+	hq,
+	qm,
+	pm,
+	rm,
+	tc
+};
+enum Button connet = rh;
+struct Resource
+{
+	IMAGE img_start[3];
+}res;
+struct button
+{
+	int x;
+	int y;
+	int w;
+	int h;
+	COLORREF color;
+	char* ptext;
+};
+struct stack
+{
+	int px[400];
+	int py[400];
+	int top;
+}Pstack;
+int num = 1, num_piece, which=1,stopflag=1, start_flag = 1,author_flag=1, button_flag=1;
+int playercolor_num = 1;
+int piece[20][20] = { 0 };
+//初始化按钮属性
+struct button* createbutton(int x, int y, int w, int h, COLORREF color, const char* ptext)
+{
+	struct button* pB = (struct button*)malloc(sizeof(struct button));
+	pB->x = x;
+	pB->y = y;
+	pB->w = w;
+	pB->h = h;
+	pB->color = color;
+	pB->ptext = (char*)malloc(strlen(ptext)+1);
+	strcpy(pB->ptext, ptext);
+	return pB;
+}
+void init_piece()
+{
+	for (int i = 0; i < 20; i++)
+		for (int j = 0; j < 20; j++)
+			piece[i][j] = 0;
+}
+void init_stack()
+{
+	for (int i = 0; i < 400; i++)
+	{
+		Pstack.px[i] = 0;
+		Pstack.py[i] = 0;
+	}
+	Pstack.top = 1;
+}
+void drawbutton(struct button* pB)
+{
+	setfillcolor(pB->color);
+	settextstyle(35, 0, "楷体");
+	setlinecolor(BLACK);
+	setbkmode(TRANSPARENT);
+	fillrectangle(pB->x, pB->y, pB->x + pB->w, pB->y + pB->h);
+	outtextxy(pB->x + 15, pB->y + 15, pB->ptext);
+}
+void Draw_button(int x)
+{
+	struct button* Rh = createbutton(920, 53, 170, 60, RGB(35, 253, 249), "返回主页");
+	struct button* Pvp = createbutton(920, 143, 170, 60, RGB(35, 253, 249), "双人对决");
+	struct button* Pve = createbutton(920, 233, 170, 60, RGB(35, 253, 249), "人机大战");
+	struct button* Hq = createbutton(920, 323, 170, 60, RGB(35, 253, 249), "落子有悔");
+	struct button* Qm = createbutton(920, 413, 170, 60, RGB(35, 253, 249), "切换音乐");
+	struct button* Pm = createbutton(920, 503, 170, 60, RGB(35, 253, 249), "暂停音乐");
+	struct button* Rm = createbutton(920, 593, 170, 60, RGB(35, 253, 249), "继续音乐");
+	struct button* Tc = createbutton(920, 683, 170, 60, RGB(35, 253, 249), "退出游戏");
+	switch (x)
+	{
+	case rh:Rh->color = RED;
+		break;
+	case pvp:Pvp->color = RED;
+		break;
+	case pve:Pve->color = RED;
+		break;
+	case hq:Hq->color = RED;
+		break;
+	case qm:Qm->color = RED;
+		break;
+	case pm:Pm->color = RED;
+		break;
+	case rm:Rm->color = RED;
+		break;
+	case tc:Tc->color = RED;
+		break;
+	}
+	drawbutton(Rh);
+	drawbutton(Pvp);
+	drawbutton(Pve);
+	drawbutton(Hq);
+	drawbutton(Qm);
+	drawbutton(Pm);
+	drawbutton(Rm);
+	drawbutton(Tc);
+}
+void initMusic(const char* music)
+{
+	char cmd[100] = { 0 };
+	sprintf(cmd, "open %s alias bgm%d", music, which);
+	MCIERROR ret = mciSendString(cmd, NULL, 0, NULL);
+	if (ret != 0)
+	{
+		char err[100] = { 0 };
+		mciGetErrorString(ret, err, sizeof(err));
+		printf("[open]:%s,%d\n", err,which);
+	}
+	which++;
+}
+void loadMusic()
+{
+	initMusic("src/summer.mp3");
+	initMusic("src/OneLastkiss.mp3");
+	initMusic("src/离别开出花.mp3");
+	initMusic("src/HandsUptotheSky.mp3");
+	initMusic("src/ShadowOfTheSun.mp3");
+	initMusic("src/我用什么把你留住(Live).mp3");
+	initMusic("src/Umbrella.mp3");
+	initMusic("src/CallofSilence.mp3");
+	initMusic("src/LilaS.mp3");
+	which = 1;
+}
+void playMusic(int i)
+{
+	char cmd2[50] = { 0 };
+	sprintf(cmd2, "play bgm%d repeat", i);
+	mciSendString(cmd2, NULL, 0, NULL);
+	stopflag = 1;
+}
+//载入所有音乐
+void stopMusic(int i)
+{
+	if (stopflag)
+	{
+		char cmd3[50] = { 0 };
+		sprintf(cmd3, "stop bgm%d", i);
+		mciSendString(cmd3, NULL, 0, NULL);
+		which++;
+		if (which == MAXMUSIC)
+		{
+			which = 1;
+		}
+		stopflag = 0;
+	}
+}
+void pauseMusic(int i)
+{
+	char cmd4[50] = { 0 };
+	sprintf(cmd4, "pause bgm%d", i);
+	mciSendString(cmd4, NULL, 0, NULL);
+}
+void resumeMusic(int i)
+{
+	char cmd5[50] = { 0 };
+	sprintf(cmd5, "resume bgm%d", i);
+	mciSendString(cmd5, NULL, 0, NULL);
+}
+//存放图片
+void res_init(struct Resource* res)
+{
+	loadimage(res->img_start + 0, "src/主页面.jpg", 1200, 920);
+	loadimage(res->img_start + 1, "src/棋盘.jpg");
+	loadimage(res->img_start + 2, "src/制作者.jpg", 920, 920);
+}
+int change_piece(int x, int y)
+{
+	Pstack.px[Pstack.top] = x;
+	Pstack.py[Pstack.top] = y;
+	Pstack.top++;
+	if (piece[x][y] != 0 || x >= 20 || y >= 20)
+	{
+		Pstack.top--;
+		Pstack.px[Pstack.top] = 0;
+		Pstack.py[Pstack.top] = 0;
+		return 0;
+	}
+	else
+		piece[x][y] = num;
+	return 1;
+}
+int check_chess()
+{
+	if (num_piece == 361)
+	{
+		return 1;
+	}
+	return 0;
+}
+//1代表黑棋，-1代表白棋
+void draw_piece(int x, int y)
+{
+	if (num == 1)
+		setfillcolor(BLACK);
+	else
+		setfillcolor(WHITE);
+	int m = x / 48.5 + 1;
+	int n = y / 48.5 + 1;
+	if (change_piece(m, n) == 0)
+		return;
+	else
+	{
+		fillcircle(48.4 * m - 23.95, 48.4 * n - 23.95,20);
+		num *= -1;
+		num_piece++;
+	}
+	if (check_chess())
+	{
+		printf("未分胜负\n");
+		exit(0);
+	}
+}
+int hui_piece()
+{
+	if (Pstack.top>=2)
+	{
+		setfillcolor(RGB(233, 187, 99));
+		Pstack.top--;
+		piece[Pstack.px[Pstack.top]][Pstack.py[Pstack.top]] = 0;
+		fillcircle(48.4 * Pstack.px[Pstack.top] - 23.95, 48.4 * Pstack.py[Pstack.top] - 23.95, 20);
+		Pstack.px[Pstack.top] = 0;
+		Pstack.py[Pstack.top] = 0;
+		num *= -1;
+		num_piece--;
+		return 1;
+	}
+	return 0;
+}
+int check_over1(int x, int y)
+{
+	int c = 0;
+	if (piece[x][y] == 0)
+	{
+		return 0;
+	}
+	if (x >= 3 && x <= 17)
+	{
+		for (int m = -2; m <= 2; m++)
+		{
+			if (piece[x + m][y] != piece[x][y])
+				break;
+			else
+				c++;
+			if (c == 5)
+				return 1;
+		}
+		c = 0;
+	}
+	if (y >= 3 && y <= 17)
+	{
+		for (int j = y - 2; j <= y + 2; j++)
+		{
+			if (piece[x][j] != piece[x][y])
+				break;
+			else
+				c++;
+			if (c == 5)
+				return 1;
+		}
+		c = 0;
+	}
+	return 0;
+}
+int check_over2(int x, int y)
+{
+	int c = 0;
+	if (piece[x][y] == 0)
+	{
+		return 0;
+	}
+	for (int m = -2; m <= 2; m++)
+	{
+		if (piece[x + m][y] != piece[x][y])
+			break;
+		else
+			c++;
+		if (c == 5)
+			return 1;
+	}
+	c = 0;
+	for (int j = y - 2; j <= y + 2; j++)
+	{
+		if (piece[x][j] != piece[x][y])
+			break;
+		else
+			c++;
+		if (c == 5)
+			return 1;
+	}
+	c = 0;
+	for (int m = -2; m <= 2; m++)
+	{
+		if (piece[x + m][y + m] != piece[x][y])
+			break;
+		else
+			c++;
+		if (c == 5)
+			return 1;
+	}
+	c = 0;
+	for (int m = -2; m <= 2; m++)
+		if (piece[x - m][y + m] != piece[x][y])
+			return 0;
+	return 1;
+}
+int check_over()
+{
+	for (int i = 1; i < 20; i++)
+		for (int j = 1; j < 20; j++)
+		{
+			if (i < 3 || i>17 || j < 3 || j>17)
+			{
+				if (check_over1(i, j))
+					return piece[i][j];
+			}
+			else
+			{
+				if (check_over2(i, j))
+					return piece[i][j];
+			}
+		}
+	return 0;
+}
+//鼠标是否在矩形区域
+bool isInRect(ExMessage* msg, int x, int y, int w, int h)
+{
+	if (msg->x > x && msg->x<x + w && msg->y>y && msg->y < y + h)
+	{
+		return true;
+	}
+	return false;
+}
+//鼠标在双人对战时的鼠标判定,用mx，my代替原本的鼠标信息，x，y
+bool playpiece_isInRect(int mx, int my, int x, int y, int w, int h)
+{
+	if (mx > x && mx<x + w && my>y && my < y + h)
+	{
+		return true;
+	}
+	return false;
+}
+void playpiece_function(int x,int y,int sw)
+{
+	//返回主页
+	if (playpiece_isInRect(x, y, 920, 53, 170, 60))
+	{
+		printf("已经开始下棋，无法返回主页\n");
+	}
+	//双人对战
+	if (playpiece_isInRect(x, y, 920, 143, 170, 60))
+	{
+		printf("已经开始双人对战\n");
+	}
+	//人机大战
+	if (playpiece_isInRect(x, y, 920, 233, 170, 60))
+	{
+		printf("已经开始双人对战，无法进行人机大战\n");
+	}
+	if (sw)
+	{
+		//落子有悔
+		if (playpiece_isInRect(x, y, 920, 323, 170, 60))
+		{
+			if (hui_piece())
+				printf("悔棋成功\n");
+			else
+				printf("悔棋失败，已无子可悔\n");
+			if (hui_piece())
+				printf("悔棋成功\n");
+			else
+				printf("悔棋失败，已无子可悔\n");
+		}
+	}
+	else
+	{
+		//落子有悔
+		if (playpiece_isInRect(x, y, 920, 323, 170, 60))
+		{
+			if (hui_piece())
+				printf("悔棋成功\n");
+			else
+				printf("悔棋失败，已无子可悔\n");
+		}
+	}
+	//切换音乐
+	if (playpiece_isInRect(x,y, 920, 413, 170, 60))
+	{
+		stopMusic(which);
+		playMusic(which);
+	}
+	//暂停音乐
+	if (playpiece_isInRect(x,y, 920, 503, 170, 60))
+	{
+		pauseMusic(which);
+	}
+	//继续音乐
+	if (playpiece_isInRect(x,y, 920, 593, 170, 60))
+	{
+		resumeMusic(which);
+	}
+	//退出游戏
+	if (playpiece_isInRect(x, y, 920, 683, 170, 60))
+	{
+		exit(0);
+	}
+}
+void playpiece_drawbutton(int x,int y)
+{
+	if (button_flag)
+	{
+		Draw_button(init);
+		button_flag = 0;
+	}
+	//返回主页按钮响应
+	if (playpiece_isInRect(x,y, 920, 53, 170, 60))
+	{
+		Draw_button(rh);
+		button_flag = 1;
+	}
+	//双人大战按钮响应
+	if (playpiece_isInRect(x, y, 920, 143, 170, 60))
+	{
+		Draw_button(pvp);
+		button_flag = 1;
+	}
+	//人机大战按钮相信
+	if (playpiece_isInRect(x, y, 920, 233, 170, 60))
+	{
+		Draw_button(pve);
+		button_flag = 1;
+	}
+	//落子有悔按钮响应
+	if (playpiece_isInRect(x, y, 920, 323, 170, 60))
+	{
+		Draw_button(hq);
+		button_flag = 1;
+	}
+	//切换音乐按钮响应
+	if (playpiece_isInRect(x, y, 920, 413, 170, 60))
+	{
+		Draw_button(qm);
+		button_flag = 1;
+	}
+	//暂停音乐按钮响应
+	if (playpiece_isInRect(x, y, 920, 503, 170, 60))
+	{
+		Draw_button(pm);
+		button_flag = 1;
+	}
+	//继续音乐按钮响应
+	if (playpiece_isInRect(x, y, 920, 593, 170, 60))
+	{
+		Draw_button(rm);
+		button_flag = 1;
+	}
+	//退出游戏按钮响应
+	if (playpiece_isInRect(x, y, 920, 683, 170, 60))
+	{
+		Draw_button(tc);
+		button_flag = 1;
+	}
+}
+void playpiece()
+{
+	init_stack();
+	MOUSEMSG m;
+	while (1)
+	{
+		m = GetMouseMsg();
+		playpiece_drawbutton(m.x,m.y);
+		if (m.uMsg == WM_LBUTTONDOWN)
+		{
+			draw_piece(m.x, m.y);
+			playpiece_function(m.x, m.y,0);
+		}
+		if (check_over() == -1)
+		{
+			printf("游戏结束，胜者为白方\n");
+			settextcolor(RED);
+			settextstyle(40, 40, "楷书");
+			outtextxy(400, 500, "白方胜利");
+			init_stack();
+			init_piece();
+			num = 1;
+			break;
+		}
+		if (check_over() == 1)
+		{
+			printf("游戏结束，胜者为黑方\n");
+			settextcolor(RED);
+			settextstyle(40, 40, "楷书");
+			outtextxy(400, 500, "黑方胜利");
+			init_stack();
+			init_piece();
+			num = 1;
+			break;
+		}
+	}
+}
+//玩家移动棋子
+int player_move_piece(int x,int y)
+{
+	setfillcolor(BLACK);
+	int m = x / 48.5 + 1;
+	int n = y / 48.5 + 1;
+	if (change_piece(m, n) == 0)
+		return 0;
+	else
+	{
+		fillcircle(48.4 * m - 23.95, 48.4 * n - 23.95, 20);
+		num_piece++;
+		return 1;
+	}
+	if (check_chess())
+	{
+		printf("未分胜负\n");
+		exit(0);
+	}
+}
+// 计算一个位置的得分
+// 恒成立计算公式
+int Score_jisuan(int noconnum_left, int noconnum_right, int connum, int connum_left, int connum_right, int othernum_left, int othernum_right, int othernum)
+{
+	int score = 0;
+	connum = connum + connum_left + connum_right;
+	othernum = othernum_left + othernum_right;
+	if (connum >= 5)
+	{
+		score += 999999;
+	}
+	if (connum == 4)
+	{
+		if (othernum == 0)//活四
+		{
+			score += 999999;
+		}
+		else if (othernum == 1)
+		{
+			if ((othernum_left == 1 && noconnum_left == 0) || (othernum_right == 1 && noconnum_right == 0))
+			{
+				score += 5000;
+			}
+			else
+			{
+				score += 999999;
+			}
+		}
+		else
+		{
+			if (noconnum_left == 0 && noconnum_right == 0)
+			{
+				score += 0;
+			}
+			else
+			{
+				score += 1000;
+			}
+		}
+	}
+	if (connum == 3)
+	{
+		if (othernum == 0)
+		{
+			score += 1500;
+		}
+		else if (othernum == 1)
+		{
+			if ((othernum_left == 1 && noconnum_left == 0) || (othernum_right == 1 && noconnum_right == 0))
+			{
+				score += 500;
+			}
+			else
+			{
+				score += 725;
+			}
+		}
+		else
+		{
+			if (noconnum_left == 0 && noconnum_right == 0)
+			{
+				score += 0;
+			}
+			else
+			{
+				score += 100;
+			}
+		}
+	}
+	if (connum == 2)
+	{
+		if (othernum == 0)
+		{
+			score += 99;
+		}
+		else if (othernum == 1)
+		{
+			if ((othernum_left == 1 && noconnum_left == 0) || (othernum_right == 1 && noconnum_right == 0))
+			{
+				score += 50;
+			}
+			else
+			{
+				score += 75;
+			}
+		}
+		else
+		{
+			if (noconnum_left == 0 && noconnum_right == 0)
+			{
+				score += 0;
+			}
+			else
+			{
+				score += 10;
+			}
+		}
+	}
+	if (connum == 1)
+	{
+		if (othernum == 0)
+		{
+			score += 9;
+		}
+		else if (othernum == 1)
+		{
+			if ((othernum_left == 1 && noconnum_left == 0) || (othernum_right == 1 && noconnum_right == 0))
+			{
+				score += 5;
+			}
+			else
+			{
+				score += 7;
+			}
+		}
+		else
+		{
+			if (noconnum_left == 0 && noconnum_right == 0)
+			{
+				score += 0;
+			}
+			else
+			{
+				score += 1;
+			}
+		}
+	}
+	return score;
+}
+//横方向上的得分
+int heng(int x, int y, int player)
+{
+	int score = 0;
+	int eflag = 1;
+	int noconnum_left = 0;
+	int noconnum_right = 0;
+	int connum = 1;//横着的棋子的总个数
+	int connum_left=0;//左边连续的棋子的个数
+	int connum_right = 0;//右边连续的棋子的个数
+	int othernum_left = 0;//左侧有其他棋子的个数
+	int othernum_right = 0;//右侧有其他棋子的个数
+	int othernum = 0;//其它棋子的个数和
+	if (player == -1)
+	{
+		for (int i = x-1; i >= x-4; i--)// 判断左边
+		{
+			if (i <= 0)
+				break;
+			else
+			{
+				if (piece[i][y] == player)
+				{
+					if (eflag)
+					{
+						connum_left++;
+					}
+					else
+					{
+						noconnum_left++;
+					}
+				}
+				else if(piece[i][y] == 0)
+				{
+					noconnum_left++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_left++;
+					break;
+				}
+			}
+		}
+		eflag = 1;
+		for (int i = x + 1; i <= x + 4; i++)//判断右边
+		{
+			if (i >= 20)
+				break;
+			else
+			{
+				if (piece[i][y] == player)
+				{
+					if (eflag)
+					{
+						connum_right++;
+					}
+					else
+					{
+						noconnum_right++;
+					}
+				}
+				else if (piece[i][y] == 0)
+				{
+					noconnum_right++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_right++;
+					break;
+				}
+			}
+		}
+		return Score_jisuan(noconnum_left, noconnum_right, connum, connum_left, connum_right, othernum_left, othernum_right, othernum);
+	}
+	if (player == 1)
+	{
+		for (int i = x - 1; i >= x - 4; i--)// 判断左边
+		{
+			if (i <= 0)
+				break;
+			else
+			{
+				if (piece[i][y] == player)
+				{
+					if (eflag)
+					{
+						connum_left++;
+					}
+					else
+					{
+						noconnum_left++;
+					}
+				}
+				else if (piece[i][y] == 0)
+				{
+					noconnum_left++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_left++;
+					break;
+				}
+			}
+		}
+		eflag = 1;
+		for (int i = x + 1; i <= x + 4; i++)//判断右边
+		{
+			if (i >= 20)
+				break;
+			else
+			{
+				if (piece[i][y] == player)
+				{
+					if (eflag)
+					{
+						connum_right++;
+					}
+					else
+					{
+						noconnum_right++;
+					}
+				}
+				else if (piece[i][y] == 0)
+				{
+					noconnum_right++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_right++;
+					break;
+				}
+			}
+		}
+		return Score_jisuan(noconnum_left, noconnum_right, connum, connum_left, connum_right, othernum_left, othernum_right, othernum)* SCORE;
+	}
+}
+//竖方向上的得分
+int shu(int x, int y, int player)
+{
+	int score = 0;
+	int eflag = 1;
+	int noconnum_left = 0;
+	int noconnum_right = 0;
+	int connum = 1;//横着的棋子的总个数
+	int connum_left=0;//左边连续的棋子的个数
+	int connum_right = 0;//右边连续的棋子的个数
+	int othernum_left = 0;//左侧有其他棋子的个数
+	int othernum_right = 0;//右侧有其他棋子的个数
+	int othernum = 0;//其它棋子的个数和
+	if (player == -1)
+	{
+		for (int i = y-1; i >= y-4; i--)// 判断左边
+		{
+			if (i <= 0)
+				break;
+			else
+			{
+				if (piece[x][i] == player)
+				{
+					if (eflag)
+					{
+						connum_left++;
+					}
+					else
+					{
+						noconnum_left++;
+					}
+				}
+				else if(piece[x][i] == 0)
+				{
+					noconnum_left++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_left++;
+					break;
+				}
+			}
+		}
+		eflag = 1;
+		for (int i = y + 1; i <= y + 4; i++)//判断右边
+		{
+			if (i >= 20)
+				break;
+			else
+			{
+				if (piece[x][i] == player)
+				{
+					if (eflag)
+					{
+						connum_right++;
+					}
+					else
+					{
+						noconnum_right++;
+					}
+				}
+				else if (piece[x][i] == 0)
+				{
+					noconnum_right++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_right++;
+					break;
+				}
+			}
+		}
+		return Score_jisuan(noconnum_left, noconnum_right, connum, connum_left, connum_right, othernum_left, othernum_right, othernum);
+	}
+	if (player == 1)
+	{
+		for (int i = y - 1; i >= y - 4; i--)// 判断左边
+		{
+			if (i <= 0)
+				break;
+			else
+			{
+				if (piece[x][i] == player)
+				{
+					if (eflag)
+					{
+						connum_left++;
+					}
+					else
+					{
+						noconnum_left++;
+					}
+				}
+				else if (piece[x][i] == 0)
+				{
+					noconnum_left++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_left++;
+					break;
+				}
+			}
+		}
+		eflag = 1;
+		for (int i = y + 1; i <= y + 4; i++)//判断右边
+		{
+			if (i >= 20)
+				break;
+			else
+			{
+				if (piece[x][i] == player)
+				{
+					if (eflag)
+					{
+						connum_right++;
+					}
+					else
+					{
+						noconnum_right++;
+					}
+				}
+				else if (piece[x][i] == 0)
+				{
+					noconnum_right++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_right++;
+					break;
+				}
+			}
+		}
+		return Score_jisuan(noconnum_left, noconnum_right, connum, connum_left, connum_right, othernum_left, othernum_right, othernum)* SCORE;
+	}
+}
+//左斜方向上的得分
+int leftxie(int x, int y, int player)
+{
+	int score = 0;
+	int eflag = 1;
+	int noconnum_left = 0;
+	int noconnum_right = 0;
+	int connum = 1;//横着的棋子的总个数
+	int connum_left = 0;//左边连续的棋子的个数
+	int connum_right = 0;//右边连续的棋子的个数
+	int othernum_left = 0;//左侧有其他棋子的个数
+	int othernum_right = 0;//右侧有其他棋子的个数
+	int othernum = 0;//其它棋子的个数和
+	if (player == -1)
+	{
+		for (int i = - 1; i >= - 4; i--)// 判断左边
+		{
+			if (x+i <= 0)
+				break;
+			else
+			{
+				if (piece[x+i][y+i] == player)
+				{
+					if (eflag)
+					{
+						connum_left++;
+					}
+					else
+					{
+						noconnum_left++;
+					}
+				}
+				else if (piece[x+i][y+i] == 0)
+				{
+					noconnum_left++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_left++;
+					break;
+				}
+			}
+		}
+		eflag = 1;
+		for (int i = 1; i <=  4; i++)//判断右边
+		{
+			if (x+i >= 20)
+				break;
+			else
+			{
+				if (piece[x+i][y+i] == player)
+				{
+					if (eflag)
+					{
+						connum_right++;
+					}
+					else
+					{
+						noconnum_right++;
+					}
+				}
+				else if (piece[x+i][y+i] == 0)
+				{
+					noconnum_right++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_right++;
+					break;
+				}
+			}
+		}
+		return Score_jisuan(noconnum_left, noconnum_right, connum, connum_left, connum_right, othernum_left, othernum_right, othernum);
+	}
+	if (player == 1)
+	{
+		for (int i = -1; i >= -4; i--)// 判断左边
+		{
+			if (x + i <= 0)
+				break;
+			else
+			{
+				if (piece[x + i][y + i] == player)
+				{
+					if (eflag)
+					{
+						connum_left++;
+					}
+					else
+					{
+						noconnum_left++;
+					}
+				}
+				else if (piece[x + i][y + i] == 0)
+				{
+					noconnum_left++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_left++;
+					break;
+				}
+			}
+		}
+		eflag = 1;
+		for (int i = 1; i <= 4; i++)//判断右边
+		{
+			if (x + i >= 20)
+				break;
+			else
+			{
+				if (piece[x + i][y + i] == player)
+				{
+					if (eflag)
+					{
+						connum_right++;
+					}
+					else
+					{
+						noconnum_right++;
+					}
+				}
+				else if (piece[x + i][y + i] == 0)
+				{
+					noconnum_right++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_right++;
+					break;
+				}
+			}
+		}
+		return Score_jisuan(noconnum_left, noconnum_right, connum, connum_left, connum_right, othernum_left, othernum_right, othernum) * SCORE;
+	}
+}
+//右斜方向上的得分
+int rightxie(int x, int y, int player)
+{
+	int score = 0;
+	int eflag = 1;
+	int noconnum_left = 0;
+	int noconnum_right = 0;
+	int connum = 1;//横着的棋子的总个数
+	int connum_left = 0;//左边连续的棋子的个数
+	int connum_right = 0;//右边连续的棋子的个数
+	int othernum_left = 0;//左侧有其他棋子的个数
+	int othernum_right = 0;//右侧有其他棋子的个数
+	int othernum = 0;//其它棋子的个数和
+	if (player == -1)
+	{
+		for (int i = -1; i >= -4; i--)// 判断左边
+		{
+			if (x + i <= 0||y-i>=20)
+				break;
+			else
+			{
+				if (piece[x + i][y - i] == player)
+				{
+					if (eflag)
+					{
+						connum_left++;
+					}
+					else
+					{
+						noconnum_left++;
+					}
+				}
+				else if (piece[x + i][y - i] == 0)
+				{
+					noconnum_left++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_left++;
+					break;
+				}
+			}
+		}
+		eflag = 1;
+		for (int i = 1; i <= 4; i++)//判断右边
+		{
+			if (x + i >= 20||y-i<=0)
+				break;
+			else
+			{
+				if (piece[x + i][y - i] == player)
+				{
+					if (eflag)
+					{
+						connum_right++;
+					}
+					else
+					{
+						noconnum_right++;
+					}
+				}
+				else if (piece[x + i][y - i] == 0)
+				{
+					noconnum_right++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_right++;
+					break;
+				}
+			}
+		}
+		return Score_jisuan(noconnum_left, noconnum_right, connum, connum_left, connum_right, othernum_left, othernum_right, othernum);
+	}
+	if (player == 1)
+	{
+		for (int i = -1; i >= -4; i--)// 判断左边
+		{
+			if (x + i <= 0 || y - i >= 20)
+				break;
+			else
+			{
+				if (piece[x + i][y - i] == player)
+				{
+					if (eflag)
+					{
+						connum_left++;
+					}
+					else
+					{
+						noconnum_left++;
+					}
+				}
+				else if (piece[x + i][y - i] == 0)
+				{
+					noconnum_left++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_left++;
+					break;
+				}
+			}
+		}
+		eflag = 1;
+		for (int i = 1; i <= 4; i++)//判断右边
+		{
+			if (x + i >= 20 || y - i <= 0)
+				break;
+			else
+			{
+				if (piece[x + i][y - i] == player)
+				{
+					if (eflag)
+					{
+						connum_right++;
+					}
+					else
+					{
+						noconnum_right++;
+					}
+				}
+				else if (piece[x + i][y - i] == 0)
+				{
+					noconnum_right++;
+					eflag = 0;
+				}
+				else
+				{
+					othernum_right++;
+					break;
+				}
+			}
+		}
+		return Score_jisuan(noconnum_left, noconnum_right, connum, connum_left, connum_right, othernum_left, othernum_right, othernum) * SCORE;
+	}
+}
+int evaluatePosition(int x, int y, int player)
+{
+	int score = 0;
+	score = heng(x, y, player) + shu(x, y, player) + leftxie(x, y, player) + rightxie(x, y, player);
+	return score;
+}
+//ai移动棋子
+void AImove()
+{
+	setfillcolor(WHITE);
+	int maxScore = -1;
+	int bestX = -1;
+	int bestY = -1;
+	for(int x=1;x<20;x++)
+		for (int y = 1; y < 20; y++)
+		{
+			if (piece[x][y] == 0)
+			{
+				int score = evaluatePosition(x, y, -1); // 评估电脑的得分
+				score += evaluatePosition(x, y, 1); // 加上防守得分
+				if (score > maxScore)
+				{
+					maxScore = score;
+					bestX = x;
+					bestY = y;
+				}
+			}
+		}
+	if (bestX != -1 && bestY != -1)
+	{
+		Pstack.px[Pstack.top] = bestX;
+		Pstack.py[Pstack.top] = bestY;
+		Pstack.top++;
+		num_piece++;
+		fillcircle(48.4 * bestX - 23.95, 48.4 * bestY - 23.95, 20);
+		piece[bestX][bestY] = -1;
+	}
+	if (check_chess())
+	{
+		printf("未分胜负\n");
+		exit(0);
+	}
+}
+void AIplay()
+{
+	init_stack();
+	MOUSEMSG m;
+	while (1)
+	{
+		int tmp = 0;
+		m = GetMouseMsg();
+		playpiece_drawbutton(m.x, m.y);
+		if (m.uMsg == WM_LBUTTONDOWN)
+		{
+			tmp=player_move_piece(m.x, m.y);//tmp记录玩家是否移动成功
+			playpiece_function(m.x, m.y,1);
+		}
+		if (check_over() == 1)
+		{
+			printf("游戏结束，胜者为黑方\n");
+			settextcolor(RED);
+			settextstyle(40, 40, "楷书");
+			outtextxy(400, 500, "玩家胜利");
+			init_piece();
+			init_stack();
+			break;
+		}
+		//ai移动
+		if (tmp)
+		{
+			Sleep(250);
+			AImove();
+			if (check_over() == -1)
+			{
+				printf("游戏结束，胜者为白方\n");
+				settextcolor(RED);
+				settextstyle(40, 40, "楷书");
+				outtextxy(400, 500, "AI胜利");
+				init_piece();
+				init_stack();
+				break;
+			}
+		}
+	}
+}
+void startupscene()
+{
+	while (1)
+	{
+		ExMessage msg;
+		while (peekmessage(&msg, EM_MOUSE))
+		{
+			if (msg.message == WM_LBUTTONDOWN)
+			{
+				if (menuState == Home)
+				{
+					//制作者
+					if (isInRect(&msg, 93, 187, 287, 87))
+					{
+						menuState = Author;
+					}
+					//开始游戏
+					else if (isInRect(&msg, 83, 300, 326, 120))
+					{
+						menuState = Start;
+					}
+					//切换音乐
+					else if (isInRect(&msg, 110, 473, 300, 87))
+					{
+						menuState = Qmusic;
+					}
+					//停止音乐
+					else if (isInRect(&msg, 93, 573, 300, 90))
+					{
+						menuState = Smusic;
+					}
+					//退出游戏
+					else if (isInRect(&msg, 100, 710, 282, 87))
+					{
+						menuState = Stop;
+					}
+				}
+				if(menuState != Home)
+				{
+					switch (menuState)
+					{
+					case Author:
+						if (author_flag)
+						{
+							closegraph();
+							initgraph(900, 900, EX_SHOWCONSOLE);
+							putimage(0, 0, res.img_start + 2);
+							author_flag = 0;
+						}
+						if (isInRect(&msg, 80, 120, 80, 40))
+						{
+							menuState = Home;
+							closegraph();
+							initgraph(1200, 920, EX_SHOWCONSOLE);
+							putimage(0, 0, res.img_start + 0);
+							author_flag = 1;
+						}
+						break;
+					case Start:
+						//为了做按钮响应，需要页面死循环
+						while (1)
+						{
+							MOUSEMSG m;
+							m = GetMouseMsg();
+							if (start_flag)
+							{
+								closegraph();
+								initgraph(1100, 920, EX_SHOWCONSOLE);
+								setbkcolor(RGB(233, 187, 99));
+								cleardevice();
+								putimage(0, 0, res.img_start + 1);
+								start_flag = 0;
+							}
+							if (button_flag)
+							{
+								Draw_button(init);
+								button_flag = 0;
+							}
+							//返回主页按钮响应
+							if (playpiece_isInRect(m.x,m.y, 920, 53, 170, 60))
+							{
+								Draw_button(rh);
+								button_flag = 1;
+							}
+							//双人大战按钮响应
+							if (playpiece_isInRect(m.x, m.y, 920, 143, 170, 60))
+							{
+								Draw_button(pvp);
+								button_flag = 1;
+							}
+							//人机大战按钮相信
+							if (playpiece_isInRect(m.x, m.y, 920, 233, 170, 60))
+							{
+								Draw_button(pve);
+								button_flag = 1;
+							}
+							//落子有悔按钮响应
+							if (playpiece_isInRect(m.x, m.y, 920, 323, 170, 60))
+							{
+								Draw_button(hq);
+								button_flag = 1;
+							}
+							//切换音乐按钮响应
+							if (playpiece_isInRect(m.x, m.y, 920, 413, 170, 60))
+							{
+								Draw_button(qm);
+								button_flag = 1;
+							}
+							//暂停音乐按钮响应
+							if (playpiece_isInRect(m.x, m.y, 920, 503, 170, 60))
+							{
+								Draw_button(pm);
+								button_flag = 1;
+							}
+							//继续音乐按钮响应
+							if (playpiece_isInRect(m.x, m.y, 920, 593, 170, 60))
+							{
+								Draw_button(rm);
+								button_flag = 1;
+							}
+							//退出游戏按钮响应
+							if (playpiece_isInRect(m.x, m.y, 920, 683, 170, 60))
+							{
+								Draw_button(tc);
+								button_flag = 1;
+							}
+							if (m.uMsg == WM_LBUTTONDOWN)
+							{
+								//返回主页
+								if (playpiece_isInRect(m.x, m.y, 920, 53, 170, 60))
+								{
+									menuState = Home;
+									closegraph();
+									initgraph(1200, 920, EX_SHOWCONSOLE);
+									putimage(0, 0, res.img_start + 0);
+									start_flag = 1;
+									button_flag = 1;
+									break;
+								}
+								//双人对决
+								if (playpiece_isInRect(m.x, m.y, 920, 143, 170, 60))
+								{
+									playpiece();
+								}
+								//人机大战
+								if (playpiece_isInRect(m.x, m.y, 920, 233, 170, 60))
+								{
+									AIplay();
+								}
+								//落子有悔
+								if (playpiece_isInRect(m.x, m.y, 920, 323, 170, 60))
+								{
+								}
+								//切换音乐
+								if (playpiece_isInRect(m.x, m.y, 920, 413, 170, 60))
+								{
+									stopMusic(which);
+									playMusic(which);
+								}
+								//暂停音乐
+								if (playpiece_isInRect(m.x, m.y, 920, 503, 170, 60))
+								{
+									pauseMusic(which);
+								}
+								//继续音乐
+								if (playpiece_isInRect(m.x, m.y, 920, 593, 170, 60))
+								{
+									resumeMusic(which);
+								}
+								//退出游戏
+								if (playpiece_isInRect(m.x, m.y, 920, 683, 170, 60))
+								{
+									exit(0);
+								}
+							}
+						}
+						break;
+					case Qmusic:
+						stopMusic(which);
+						playMusic(which);
+						menuState = Home;
+						break;
+					case Smusic:
+						stopMusic(which);
+						menuState = Home;
+						break;
+					case Stop:
+						exit(0);
+						break;
+					}
+				}
+			}
+		}
+	}
+}
+void initscene()
+{
+	SetConsoleTitle("五子棋");
+	initgraph(1200, 920, EX_SHOWCONSOLE);
+	res_init(&res);
+	putimage(0, 0, res.img_start + 0);
+}
+int main()
+{
+	loadMusic();
+	playMusic(which);
+	initscene();
+	startupscene();
+	return 0;
+}
